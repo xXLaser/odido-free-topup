@@ -98,19 +98,47 @@ class ZteRouter:
         prefix = _sha256_upper(self.wa + self.cr)
         return _sha256_upper(prefix + rd.upper())
 
+    def _iter_set_cookie_headers(self, response: requests.Response) -> list[str]:
+        values: list[str] = []
+        raw = getattr(response, "raw", None)
+        headers = getattr(raw, "headers", None) if raw is not None else None
+        if headers is not None:
+            for getter in ("get_all", "getlist"):
+                fn = getattr(headers, getter, None)
+                if callable(fn):
+                    try:
+                        values.extend(fn("Set-Cookie") or [])
+                        values.extend(fn("set-cookie") or [])
+                    except Exception:
+                        pass
+        if not values:
+            # requests may expose only one combined header
+            for key in response.headers:
+                if key.lower() == "set-cookie":
+                    values.append(response.headers[key])
+        return values
+
     def _pick_stok(self, response: requests.Response) -> str | None:
-        try:
-            cookies = response.raw.headers.getlist("Set-Cookie")  # type: ignore[attr-defined]
-        except Exception:
-            sc = response.headers.get("Set-Cookie")
-            cookies = [sc] if sc else []
-        for sc in cookies:
-            m = re.search(r"stok=([^;]+)", sc or "")
+        # 1) Set-Cookie Rohzeilen (zuverlaessigste Quelle)
+        for sc in self._iter_set_cookie_headers(response):
+            m = re.search(r"\bstok\s*=\s*\"?([^\";,\s]+)\"?", sc or "", flags=re.I)
             if m:
-                return m.group(1).strip().strip('"')
-        stok = response.cookies.get("stok") or self.session.cookies.get("stok")
-        if stok:
-            return str(stok).strip().strip('"')
+                return m.group(1).strip()
+
+        # 2) Cookie-Jars
+        self.session.cookies.update(response.cookies)
+        for jar in (response.cookies, self.session.cookies):
+            for name in ("stok", "STOK", "Stok"):
+                val = jar.get(name)
+                if val:
+                    return str(val).strip().strip('"')
+            # Fallback: irgendein Cookie das nach stok aussieht
+            try:
+                for c in jar:
+                    if "stok" in c.name.lower() and c.value:
+                        return str(c.value).strip().strip('"')
+            except Exception:
+                pass
         return None
 
     def login(self) -> str:
@@ -158,19 +186,34 @@ class ZteRouter:
         last_result = ""
         last_body = ""
         for payload in attempts:
-            r = self._post(payload)
+            # Login ohne vorherige Cookie-Header
+            self.stok = None
+            r = self.session.post(
+                f"{self.base}goform/goform_set_cmd_process",
+                data=payload,
+                headers={
+                    "Referer": self.base,
+                    "Origin": self.base.rstrip("/"),
+                    "Accept": "application/json, text/javascript, */*; q=0.01",
+                    "X-Requested-With": "XMLHttpRequest",
+                },
+                timeout=self.timeout,
+                verify=False,
+            )
             last_body = (r.text or "")[:200]
             try:
                 data = r.json()
             except Exception:
                 data = {}
             last_result = str(data.get("result", ""))
+            set_cookies = self._iter_set_cookie_headers(r)
             stok = self._pick_stok(r)
             log.debug(
-                "Login goformId=%s result=%s stok=%s",
+                "Login goformId=%s result=%s stok=%s set-cookie=%r",
                 payload.get("goformId"),
                 last_result,
                 "yes" if stok else "no",
+                set_cookies,
             )
 
             if last_result == "3":
@@ -179,7 +222,40 @@ class ZteRouter:
                     "Browser-Tab mit 192.168.0.1 SCHLIESSEN / abmelden, 10 Sekunden warten, dann erneut."
                 )
 
-            if last_result == "0" and stok:
+            if last_result == "0":
+                if not stok:
+                    # Manche Firmwares setzen Cookie erst beim naechsten GET
+                    self.session.get(
+                        f"{self.base}index.html",
+                        headers={
+                            "Referer": self.base,
+                        },
+                        timeout=self.timeout,
+                        verify=False,
+                    )
+                    stok = self.session.cookies.get("stok")
+                    if stok:
+                        stok = str(stok).strip().strip('"')
+
+                if not stok:
+                    log.warning(
+                        "Login OK (result=0), aber kein stok-Cookie. "
+                        "Set-Cookie=%r session=%r",
+                        set_cookies,
+                        self.session.cookies.get_dict(),
+                    )
+                    # Trotzdem AD berechnen und ohne Cookie versuchen —
+                    # einige Aktionen brauchen nur AD; SEND_SMS meist stok.
+                    # synthetischen Marker setzen, Cookie-Header weglassen
+                    self.stok = ""
+                    rd = self._field("RD")
+                    self._ad = self._ad_token(rd)
+                    raise RuntimeError(
+                        "Login result=0, aber Router sendet keinen stok-Cookie. "
+                        f"Set-Cookie-Header: {set_cookies!r}. "
+                        "Bitte diese Zeile melden. Tipp: anderen Browser-Login beenden, Router kurz trennen/an."
+                    )
+
                 self.stok = stok
                 self.session.cookies.set("stok", stok, path="/")
                 rd = self._field("RD")
@@ -187,18 +263,7 @@ class ZteRouter:
                 log.info("ZTE-Login OK")
                 return stok
 
-            if last_result == "0" and not stok:
-                # Cookie evtl. nur in session
-                stok = self.session.cookies.get("stok")
-                if stok:
-                    self.stok = str(stok).strip().strip('"')
-                    rd = self._field("RD")
-                    self._ad = self._ad_token(rd)
-                    log.info("ZTE-Login OK (session cookie)")
-                    return self.stok
-
             if last_result == "1":
-                # Falsches Passwort — weitere goformIds mit gleichem Hash sinnlos
                 break
 
         hint = ""
