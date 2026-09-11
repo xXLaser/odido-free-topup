@@ -1,0 +1,194 @@
+# Odido Fair Use — Guthaben automatisch gratis nachladen
+
+**Geprüft am: 11. September 2026**
+
+Diese Anleitung ist für Leute gedacht, die **keinen IT-Hintergrund** haben.  
+Du brauchst einen normalen Windows-PC und deine Odido-SIM (z. B. im ZTE-Router).
+
+---
+
+## Was macht das Programm?
+
+Bei Odido **Unlimited** bekommst du jeden Tag **20 GB** schnelles Internet in den Niederlanden.  
+Sind die fast leer, darfst du **so oft du willst kostenlos 2 GB nachladen** („Aanvuller“).
+
+Normalerweise machst du das per Hand in der Odido-App.  
+Dieses Programm prüft auf dem PC regelmäßig: „Wie viel GB sind noch übrig?“  
+Wenn wenig übrig ist, lädt es **automatisch nach — aber nur, wenn es gratis ist**.
+
+| Was | Antwort |
+| --- | --- |
+| Kostet das Nachladen etwas? | **Nein.** Es wird nur der kostenlose 2‑GB-Aanvuller angefordert. |
+| Muss ich am Router etwas umbauen? | **Nein.** Der ZTE-Router bleibt wie er ist. |
+| Wo läuft das Programm? | Auf deinem **PC** (nicht im Router). |
+| Wann brauche ich es? | Wenn du an einem Tag **mehr als 20 GB** brauchst (z. B. große Downloads). |
+
+---
+
+## Ist das noch aktuell?
+
+Stand September 2026:
+
+- Odido beschreibt Fair Use weiter so: **20 GB/Tag**, danach **gratis 2 GB** so oft wie nötig.  
+  Quelle: [Odido FAQ](https://www.odido.nl/service/veelgestelde-vragen/waarom-krijg-ik-20-gb-per-dag-ik-heb-toch-unlimited/000453219)
+- Der technische Code dafür (`A0DAY01`) ist weiterhin der Standard in aktuellen Community-Tools (letztes Update u. a. **8.9.2026**).
+- Es gibt **keine offizielle Odido-Automation**. Das hier nutzt die gleiche Schnittstelle wie die App — **auf eigene Verantwortung**.
+
+**Wichtig:** Das gilt für **Unlimited** mit Fair Use.  
+Nicht für Verträge ohne diese gratis Aanvullers — dort könnte Nachladen **Geld kosten**. Dann dieses Programm **nicht** nutzen.
+
+---
+
+## Was du brauchst
+
+1. Windows-PC mit Internet (über den ZTE-Router ist okay)
+2. Odido-Login (E-Mail/Passwort oder wie du dich sonst anmeldest)
+3. Die **Handynummer der SIM** im Router (beginnt oft mit `+316…`)
+4. **Python** (kostenlose Software) — Installation siehe Schritt 1
+
+---
+
+## Schritt für Schritt
+
+### Schritt 1 — Python installieren (einmalig)
+
+1. Öffne im Browser: https://www.python.org/downloads/
+2. Klicke auf den großen gelben Button **Download Python**
+3. Starte die heruntergeladene Datei
+4. **Sehr wichtig:** Haken setzen bei  
+   **„Add python.exe to PATH“**
+5. Auf **Install Now** klicken und fertig warten
+
+Wenn Python schon installiert ist, kannst du diesen Schritt überspringen.
+
+---
+
+### Schritt 2 — Dieses Programm einrichten (einmalig)
+
+1. Öffne den Ordner  
+   `C:\Users\Matthias\odido-free-topup`
+2. Doppelklick auf **`einrichten.bat`**
+3. Warte, bis „Fertig“ erscheint
+4. Es öffnet sich die Datei **`.env`** im Editor (Notepad)
+
+In der Datei siehst du ungefähr:
+
+```text
+ODIDO_TOKEN=hier_dein_token_einfuegen
+ODIDO_MSISDN=+31612345678
+```
+
+- Bei **`ODIDO_MSISDN=`** trägst du die echte Nummer der SIM ein, z. B. `+31612345678`  
+  (ohne Leerzeichen)
+- Bei **`ODIDO_TOKEN=`** kommt später der Zugangscode rein (nächster Schritt)
+
+Speichern und Notepad schließen.
+
+---
+
+### Schritt 3 — Zugangscode (Token) holen
+
+Das Programm braucht einen **Zugangscode**, damit Odido weiß: „Das bist du.“  
+Das ist **kein Passwort zum Weitergeben**. Behandle es wie ein Passwort.
+
+1. Öffne: https://github.com/GuusBackup/Odido.Authenticator/releases/latest  
+2. Unter **Assets** die Datei **`Odido-Authenticator.zip`** herunterladen  
+3. ZIP entpacken (Rechtsklick → „Alle extrahieren“)  
+4. **`Odido.Authenticator.exe`** starten  
+5. Das Programm zeigt eine **Internetadresse (URL)**  
+6. Diese Adresse im Browser öffnen und bei Odido **einloggen**  
+7. Nach dem Login landest du auf einer Seite, deren Adresse ungefähr so beginnt:  
+   `https://www.odido.nl/loginappresult?token=...`  
+8. **Die gesamte Adresse aus der Browser-Zeile kopieren**  
+9. Zurück ins Authenticator-Fenster: Adresse **einfügen** und Enter  
+10. Den angezeigten **Authentication Token** kopieren  
+11. In der Datei `.env` hinter `ODIDO_TOKEN=` einfügen (alles in einer Zeile, ohne Anführungszeichen)  
+12. Speichern
+
+**Tipp:** Wenn Windows warnt „Unbekannter Herausgeber“, kannst du bei Vertrauen in die Quelle trotzdem fortfahren — das Tool kommt von der Community, nicht von Odido.
+
+Wenn das Programm später meldet, der Token sei ungültig (401/403), wiederhole Schritt 3.
+
+---
+
+### Schritt 4 — Testen (noch nichts nachladen)
+
+1. Doppelklick auf **`testen.bat`**
+2. Im Fenster sollte ungefähr stehen, wie viele MB noch übrig sind  
+3. Es steht dabei **DRY-RUN** — es wird **nichts** nachgeladen
+
+Wenn hier schon ein Fehler kommt:
+
+| Meldung | Was tun |
+| --- | --- |
+| Kein Token / Token fehlt | `.env` prüfen, `ODIDO_TOKEN=` ausfüllen |
+| 401 / 403 | Token neu holen (Schritt 3) |
+| Keine Subscription | `ODIDO_MSISDN` prüfen (`+31…`) |
+| Python nicht gefunden | Schritt 1 nochmal, PATH-Haken setzen |
+
+---
+
+### Schritt 5 — Automatisch laufen lassen
+
+Wenn der Test okay war:
+
+1. Doppelklick auf **`starten.bat`**
+2. Das Fenster **offen lassen**
+3. Das Programm prüft alle paar Minuten und lädt bei Bedarf **gratis** nach
+4. Beenden: Fenster anklicken und **Strg + C**, oder Fenster schließen
+
+Solange du an dem Tag viel herunterlädst, lass `starten.bat` einfach mitlaufen.
+
+---
+
+## Was passiert hinter den Kulissen? (kurz)
+
+```text
+PC (dieses Programm)  →  fragt Odido: „Wie viel GB sind noch da?“
+                      →  wenn wenig übrig: „Bitte gratis 2 GB“ (Code A0DAY01)
+ZTE-Router            →  macht nur Internet, keine Auffüllung
+```
+
+Es werden **keine bezahlten** Pakete gekauft. Im Programm ist fest verdrahtet: nur der gratis-Code.
+
+---
+
+## Häufige Fragen
+
+**Warum stockt das Internet trotzdem kurz?**  
+Odido erlaubt den nächsten Aanvuller oft erst, wenn vom aktuellen noch **wenig** übrig ist (rund unter 350 MB). Kurz langsamer werden kann normal sein — danach sollte es wieder schnell gehen.
+
+**Gilt der Aanvuller den ganzen Tag?**  
+Ja, typischerweise bis **23:59 Uhr** am selben Tag (Niederlande). Am nächsten Tag startest du wieder mit dem normalen Tagesguthaben.
+
+**Kann das Geld kosten?**  
+Nur wenn du **kein** Unlimited mit gratis Aanvuller hast. Bei Unlimited Fair Use: nein. Das Programm kauft bewusst **keine** kostenpflichtigen Pakete.
+
+**Muss der PC die ganze Nacht an sein?**  
+Nur wenn du in der Zeit weiter viel Daten verbrauchst und automatisch nachgeladen werden soll. Sonst reicht: einschalten, wenn du große Downloads planst.
+
+**Ist das erlaubt?**  
+Odido selbst sagt, du darfst die gratis Aanvullers so oft aktivieren wie du willst. Automatisierung über die App-Schnittstelle ist **nicht offiziell** und kann gegen Nutzungsbedingungen verstoßen. Nutzung auf eigene Verantwortung.
+
+---
+
+## Dateien im Überblick
+
+| Datei | Wofür |
+| --- | --- |
+| `einrichten.bat` | Einmalig vorbereiten |
+| `testen.bat` | Sicher prüfen, ohne nachzuladen |
+| `starten.bat` | Automatik starten |
+| `.env` | Deine persönlichen Einstellungen (Token, Nummer) — **geheim halten** |
+| `ANLEITUNG.md` | Diese Anleitung |
+| `odido_free_topup.py` | Das eigentliche Programm |
+
+---
+
+## Hilfe zum Token (Alternative)
+
+Es gibt auch ein aktuelles Fertig-Programm von der Community (Windows-Datei, Stand Sept. 2026):  
+https://github.com/lodu/odido-bundle-replenisher/releases/latest  
+
+Dort unter Assets: **`odido-bundle-replenisher-windows.zip`**.  
+Das kann beim ersten Start die Anmeldung selbst führen. Unser Ordner hier bleibt die einfache Python-Variante mit den `.bat`-Dateien oben.
