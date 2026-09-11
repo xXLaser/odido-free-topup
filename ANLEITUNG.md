@@ -154,6 +154,19 @@ ZTE_PERIODIC_EXTRA_MINUTES=0
 
 Wenn die Meldung `result=1` kommt: Passwort ist falsch → Aufkleber / in der Web-UI gesetztes Admin-Passwort prüfen.
 
+#### SMS geht in der Router-Oberfläche auch nicht?
+
+Dann kann **diese SIM im ZTE keine SMS senden** (häufig bei Daten-SIMs / Router-Betrieb).  
+Die Automatik `EXTRA → 1280` funktioniert dann **nicht**.
+
+Alternativen:
+
+1. **Token-/API-Variante** wieder versuchen (`token-holen.bat` + `starten.bat`)  
+2. SIM kurz in ein **Handy** stecken, in der Odido-App oder per SMS `EXTRA` an `1280` auffüllen, SIM zurück in den Router  
+3. Odido fragen, ob SMS bei dieser Karte/diesem Tarif freigeschaltet ist  
+
+Zum Prüfen: `sms-diagnose.bat` (nur Anzeige, sendet nichts).
+
 3. Doppelklick **`testen-sms.bat`** (nur Login-Test, sendet noch keine SMS)
 4. Wenn das OK aussieht: **`sms-extra-jetzt.bat`** — sendet **einmal** `EXTRA` an **1280** (gratis Aanvuller)
 5. Dauerhaft: **`starten-sms.bat`**  
