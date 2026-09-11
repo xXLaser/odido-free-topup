@@ -61,12 +61,27 @@ Nicht für Verträge ohne diese gratis Aanvullers — dort könnte Nachladen **G
 
 Wenn Python schon installiert ist, kannst du diesen Schritt überspringen.
 
+#### Python ist da, aber `einrichten.bat` findet es nicht?
+
+Auf manchen PCs (z. B. Benutzerordner `jeffr`) steht Python schon unter  
+`C:\Users\...\AppData\Local\Python\bin` — aber **WindowsApps** steht darüber im PATH und blockiert es.
+
+Im Fenster **„Umgebungsvariable bearbeiten“** (Path):
+
+1. Den Eintrag `...\AppData\Local\Python\bin` markieren  
+2. Mehrfach **„Nach oben“** klicken, bis er **ganz oben** steht (über WindowsApps)  
+3. **OK** → **OK**  
+4. Alle CMD-/Einrichtungsfenster **schließen**  
+5. **`einrichten.bat` erneut** per Doppelklick starten  
+
+Die aktuelle `einrichten.bat` sucht Python auch direkt in diesem Ordner — oft reicht schon ein erneuter Start.
+
 ---
 
 ### Schritt 2 — Dieses Programm einrichten (einmalig)
 
-1. Öffne den Ordner  
-   `C:\Users\Matthias\odido-free-topup`
+1. Ordner mit dem Programm öffnen  
+   (z. B. Download von GitHub entpacken, oder der Ordner `odido-free-topup` auf dem PC)
 2. Doppelklick auf **`einrichten.bat`**
 3. Warte, bis „Fertig“ erscheint
 4. Es öffnet sich die Datei **`.env`** im Editor (Notepad)
