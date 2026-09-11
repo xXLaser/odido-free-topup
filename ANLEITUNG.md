@@ -12,16 +12,21 @@ Du brauchst einen normalen Windows-PC und deine Odido-SIM (z. B. im ZTE-Router
 Bei Odido **Unlimited** bekommst du jeden Tag **20 GB** schnelles Internet in den Niederlanden.  
 Sind die fast leer, darfst du **so oft du willst kostenlos 2 GB nachladen** („Aanvuller“).
 
-Normalerweise machst du das per Hand in der Odido-App.  
-Dieses Programm prüft auf dem PC regelmäßig: „Wie viel GB sind noch übrig?“  
-Wenn wenig übrig ist, lädt es **automatisch nach — aber nur, wenn es gratis ist**.
+Es gibt **zwei Wege** (beides nur gratis):
+
+| Variante | Wie | Wann nutzen |
+| --- | --- | --- |
+| **B — SMS über ZTE-Router** | PC schickt per Router-SMS `EXTRA` an **1280** | **Empfohlen**, wenn der App-Token nicht klappt |
+| A — Odido-API mit Token | Wie die App, BuyingCode `A0DAY01` | Wenn Token-Holen funktioniert |
+
+Laut Odido-Support geht der gratis 2‑GB-Aanvuller u. a. per SMS: **EXTRA → 1280**.
 
 | Was | Antwort |
 | --- | --- |
-| Kostet das Nachladen etwas? | **Nein.** Es wird nur der kostenlose 2‑GB-Aanvuller angefordert. |
-| Muss ich am Router etwas umbauen? | **Nein.** Der ZTE-Router bleibt wie er ist. |
-| Wo läuft das Programm? | Auf deinem **PC** (nicht im Router). |
-| Wann brauche ich es? | Wenn du an einem Tag **mehr als 20 GB** brauchst (z. B. große Downloads). |
+| Kostet das Nachladen etwas? | **Nein** (nur Unlimited-Fair-Use / EXTRA an 1280). |
+| Muss ich am Router etwas umbauen? | **Nein.** Der PC spricht die Router-Weboberfläche an. |
+| Wo läuft das Programm? | Auf dem **PC** im WLAN/LAN des Routers. |
+| Wann brauche ich es? | Wenn du an einem Tag **mehr als 20 GB** brauchst. |
 
 ---
 
@@ -41,10 +46,11 @@ Nicht für Verträge ohne diese gratis Aanvullers — dort könnte Nachladen **G
 
 ## Was du brauchst
 
-1. Windows-PC mit Internet (über den ZTE-Router ist okay)
-2. Odido-Login (E-Mail/Passwort oder wie du dich sonst anmeldest)
-3. Die **Handynummer der SIM** im Router (beginnt oft mit `+316…`)
-4. **Python** (kostenlose Software) — Installation siehe Schritt 1
+1. Windows-PC im WLAN/LAN des ZTE-Routers
+2. Odido **Unlimited** (Fair Use mit gratis Aanvullers)
+3. **Python** — Installation siehe Schritt 1
+4. Für **SMS-Variante:** Router-Passwort (wie beim Login im Browser, oft `192.168.0.1`)
+5. Für **Token-Variante:** Odido-Login + Authenticator (Schritt 3 weiter unten)
 
 ---
 
@@ -118,6 +124,36 @@ ODIDO_MSISDN=+31612345678
 - Bei **`ODIDO_TOKEN=`** kommt später der Zugangscode rein (nächster Schritt)
 
 Speichern und Notepad schließen.
+
+---
+
+### Schritt 2b — SMS-Variante über den ZTE-Router (ohne Token)
+
+Das ist der Weg, wenn Schritt 3 (Token) nicht klappt.
+
+1. Im Browser die Router-Seite öffnen (meist `http://192.168.0.1` oder `http://192.168.1.1`)  
+   und prüfen, dass Login mit Benutzer/Passwort funktioniert.
+2. In der Datei **`.env`** eintragen (Beispiel):
+
+```text
+ZTE_HOST=192.168.0.1
+ZTE_USER=admin
+ZTE_PASSWORD=dein_router_passwort
+ZTE_INTERVAL=120
+ZTE_PERIODIC_EXTRA_MINUTES=0
+```
+
+3. Doppelklick **`testen-sms.bat`** (nur Login-Test, sendet noch keine SMS)
+4. Wenn das OK aussieht: **`sms-extra-jetzt.bat`** — sendet **einmal** `EXTRA` an **1280** (gratis Aanvuller)
+5. Dauerhaft: **`starten-sms.bat`**  
+   - Liest den SMS-Posteingang des Routers  
+   - Wenn Odido eine Hinweis-SMS schickt → sendet automatisch `EXTRA` an 1280  
+   - Sendet **keine** bezahlten Pakete (Nummer/Text sind fest verdrahtet)
+
+**Tipp bei großen Downloads:** In `.env` z. B. `ZTE_PERIODIC_EXTRA_MINUTES=45` setzen.  
+Dann wird alle 45 Minuten vorsorglich `EXTRA` geschickt (Odido akzeptiert das oft nur, wenn wenig Rest übrig ist).
+
+**Wichtig:** PC muss im Netz des ZTE-Routers sein. Router-Modell idealerweise ZTE MC801 / MC888 / ähnlich.
 
 ---
 
@@ -221,12 +257,14 @@ Odido selbst sagt, du darfst die gratis Aanvullers so oft aktivieren wie du will
 | Datei | Wofür |
 | --- | --- |
 | `einrichten.bat` | Einmalig vorbereiten |
+| `starten-sms.bat` | **SMS-Automatik** (ZTE, ohne Token) |
+| `testen-sms.bat` | SMS-Login testen (Dry-Run) |
+| `sms-extra-jetzt.bat` | Einmal EXTRA an 1280 senden |
 | `token-holen.bat` | Zugangscode holen (Fenster bleibt offen) |
-| `testen.bat` | Sicher prüfen, ohne nachzuladen |
-| `starten.bat` | Automatik starten |
-| `.env` | Deine persönlichen Einstellungen (Token, Nummer) — **geheim halten** |
+| `testen.bat` | API-Variante prüfen, ohne nachzuladen |
+| `starten.bat` | API-Automatik starten |
+| `.env` | Einstellungen (Router-Passwort / Token) — **geheim halten** |
 | `ANLEITUNG.md` | Diese Anleitung |
-| `odido_free_topup.py` | Das eigentliche Programm |
 
 ---
 
