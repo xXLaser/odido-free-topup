@@ -89,6 +89,13 @@ def send_free_extra(router: ZteRouter, log: logging.Logger, dry_run: bool) -> No
         return
     result = router.send_sms(FREE_SMS_NUMBER, FREE_SMS_TEXT)
     log.info("Router-Antwort: %s", result)
+    status = str(result.get("result", "")).lower()
+    if status in ("failure", "fail", "-1", "error"):
+        log.error(
+            "SMS fehlgeschlagen. Router-Webseite im Browser schliessen, "
+            "ZTE_USER=admin in .env setzen, dann erneut versuchen."
+        )
+        raise RuntimeError(f"SEND_SMS failure: {result}")
 
 
 def process_inbox(router: ZteRouter, log: logging.Logger, dry_run: bool, seen: set[str]) -> bool:
