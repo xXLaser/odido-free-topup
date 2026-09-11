@@ -137,16 +137,22 @@ Das ist der Weg, wenn Schritt 3 (Token) nicht klappt.
 
 ```text
 ZTE_HOST=192.168.0.1
-ZTE_USER=admin
-ZTE_PASSWORD=dein_router_passwort
+ZTE_USER=
+ZTE_PASSWORD=WebsitePasswortVomAufkleber
 ZTE_INTERVAL=120
 ZTE_PERIODIC_EXTRA_MINUTES=0
 ```
 
-**MC888 / MC888 Pro:**  
-- `ZTE_USER=admin` setzen (auch wenn die Web-UI keinen Namen fragt)  
-- **Vor dem Start:** Router-Seite im Browser **schließen/ausloggen** (nur eine Session!)  
-- Dann `sms-extra-jetzt.bat`
+**MC888 / MC888 Pro — wichtig:**
+
+1. Passwort = **Website-/Admin-Passwort** vom Aufkleber am Router  
+   (nicht das WLAN-Passwort!)
+2. In `.env` **ohne** Anführungszeichen, z. B. `ZTE_PASSWORD=Ab12cd34`
+3. `ZTE_USER=` leer lassen
+4. Browser-Tab mit der Router-Seite **schließen**, bevor du das Script startest
+5. Dann `sms-extra-jetzt.bat`
+
+Wenn die Meldung `result=1` kommt: Passwort ist falsch → Aufkleber / in der Web-UI gesetztes Admin-Passwort prüfen.
 
 3. Doppelklick **`testen-sms.bat`** (nur Login-Test, sendet noch keine SMS)
 4. Wenn das OK aussieht: **`sms-extra-jetzt.bat`** — sendet **einmal** `EXTRA` an **1280** (gratis Aanvuller)
