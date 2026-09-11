@@ -15,13 +15,16 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 log = logging.getLogger("zte")
 
+# Neuere Firmwares (MC888 Pro ABPL): zsidn — aeltere: stok
+SESSION_COOKIE_NAMES = ("zsidn", "stok", "random")
+
 
 def _sha256_upper(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8")).hexdigest().upper()
 
 
 class ZteRouter:
-    """Based on working MC888 flows (zte-to-telegram / community)."""
+    """MC888 / MC888 Pro goform client."""
 
     def __init__(
         self,
@@ -31,7 +34,6 @@ class ZteRouter:
         timeout: float = 20.0,
     ) -> None:
         self.host = host.strip().removeprefix("http://").removeprefix("https://").rstrip("/")
-        # Passwort ggf. mit Anfuehrungszeichen/Spaces in .env bereinigen
         self.password = password.strip().strip('"').strip("'")
         self.username = (username or "").strip()
         self.timeout = timeout
@@ -39,8 +41,11 @@ class ZteRouter:
         self.base = f"http://{self.host}/"
         self.wa = ""
         self.cr = ""
-        self.stok: str | None = None
+        self.cookie_name = "zsidn"
+        self.cookie_value: str | None = None
         self._ad: str | None = None
+        # Rueckwaertskompatibel fuer aelteren Code
+        self.stok: str | None = None
         self._probe()
 
     def _probe(self) -> None:
@@ -60,15 +65,16 @@ class ZteRouter:
             "Accept": "application/json, text/javascript, */*; q=0.01",
             "X-Requested-With": "XMLHttpRequest",
         }
-        if with_cookie and self.stok:
-            h["Cookie"] = f'stok="{self.stok}"'
+        if with_cookie and self.cookie_value:
+            # Wie vom Router gesetzt: Name="VALUE"
+            h["Cookie"] = f'{self.cookie_name}="{self.cookie_value}"'
         return h
 
     def _get(self, params: dict[str, str]) -> dict[str, Any]:
         r = self.session.get(
             f"{self.base}goform/goform_get_cmd_process",
             params=params,
-            headers=self._headers(with_cookie=bool(self.stok)),
+            headers=self._headers(with_cookie=bool(self.cookie_value)),
             timeout=self.timeout,
             verify=False,
         )
@@ -79,7 +85,7 @@ class ZteRouter:
         return self.session.post(
             f"{self.base}goform/goform_set_cmd_process",
             data=data,
-            headers=self._headers(with_cookie=bool(self.stok)),
+            headers=self._headers(with_cookie=bool(self.cookie_value)),
             timeout=self.timeout,
             verify=False,
         )
@@ -90,7 +96,6 @@ class ZteRouter:
         return "" if val is None else str(val)
 
     def _password_hash(self, ld: str) -> str:
-        # Kritisch: LD.upper() — ohne das kommt oft result=1
         prefix = _sha256_upper(self.password)
         return _sha256_upper(prefix + ld.upper())
 
@@ -112,37 +117,42 @@ class ZteRouter:
                     except Exception:
                         pass
         if not values:
-            # requests may expose only one combined header
             for key in response.headers:
                 if key.lower() == "set-cookie":
                     values.append(response.headers[key])
         return values
 
-    def _pick_stok(self, response: requests.Response) -> str | None:
-        # 1) Set-Cookie Rohzeilen (zuverlaessigste Quelle)
+    def _pick_session_cookie(self, response: requests.Response) -> tuple[str, str] | None:
+        """Return (cookie_name, cookie_value) from Set-Cookie / jars."""
         for sc in self._iter_set_cookie_headers(response):
-            m = re.search(r"\bstok\s*=\s*\"?([^\";,\s]+)\"?", sc or "", flags=re.I)
-            if m:
-                return m.group(1).strip()
+            for name in SESSION_COOKIE_NAMES:
+                m = re.search(
+                    rf"\b{re.escape(name)}\s*=\s*\"?([^\";,\s]+)\"?",
+                    sc or "",
+                    flags=re.I,
+                )
+                if m:
+                    return name.lower(), m.group(1).strip().strip('"')
 
-        # 2) Cookie-Jars
         self.session.cookies.update(response.cookies)
-        for jar in (response.cookies, self.session.cookies):
-            for name in ("stok", "STOK", "Stok"):
-                val = jar.get(name)
-                if val:
-                    return str(val).strip().strip('"')
-            # Fallback: irgendein Cookie das nach stok aussieht
-            try:
-                for c in jar:
-                    if "stok" in c.name.lower() and c.value:
-                        return str(c.value).strip().strip('"')
-            except Exception:
-                pass
+        jar = {**response.cookies.get_dict(), **self.session.cookies.get_dict()}
+        for name in SESSION_COOKIE_NAMES:
+            if name in jar and jar[name]:
+                return name, str(jar[name]).strip().strip('"')
+            # case variants
+            for k, v in jar.items():
+                if k.lower() == name and v:
+                    return name, str(v).strip().strip('"')
         return None
 
+    def _set_session(self, name: str, value: str) -> None:
+        self.cookie_name = name
+        self.cookie_value = value
+        self.stok = value  # alias
+        # requests jar ohne ueberfluessige Anfuehrungszeichen
+        self.session.cookies.set(name, value, path="/")
+
     def login(self) -> str:
-        # Version laden
         info = self._get(
             {
                 "isTest": "false",
@@ -161,7 +171,6 @@ class ZteRouter:
         hashed = self._password_hash(ld)
         log.debug("LD=%s... hash_prefix=%s...", ld[:8], hashed[:8])
 
-        # MC888: einfaches LOGIN, oft OHNE Benutzername
         attempts: list[dict[str, str]] = [
             {"isTest": "false", "goformId": "LOGIN", "password": hashed},
         ]
@@ -174,19 +183,11 @@ class ZteRouter:
                     "user": self.username,
                 }
             )
-            attempts.append(
-                {
-                    "isTest": "false",
-                    "goformId": "LOGIN_MULTI_USER",
-                    "password": hashed,
-                    "user": self.username,
-                }
-            )
 
         last_result = ""
         last_body = ""
         for payload in attempts:
-            # Login ohne vorherige Cookie-Header
+            self.cookie_value = None
             self.stok = None
             r = self.session.post(
                 f"{self.base}goform/goform_set_cmd_process",
@@ -206,62 +207,48 @@ class ZteRouter:
             except Exception:
                 data = {}
             last_result = str(data.get("result", ""))
+            picked = self._pick_session_cookie(r)
             set_cookies = self._iter_set_cookie_headers(r)
-            stok = self._pick_stok(r)
             log.debug(
-                "Login goformId=%s result=%s stok=%s set-cookie=%r",
+                "Login goformId=%s result=%s cookie=%s set-cookie=%r",
                 payload.get("goformId"),
                 last_result,
-                "yes" if stok else "no",
+                f"{picked[0]}={picked[1][:12]}..." if picked else "no",
                 set_cookies,
             )
 
             if last_result == "3":
                 raise RuntimeError(
                     "Router-Session belegt (result=3). "
-                    "Browser-Tab mit 192.168.0.1 SCHLIESSEN / abmelden, 10 Sekunden warten, dann erneut."
+                    "Browser-Tab mit 192.168.0.1 SCHLIESSEN, 10 Sekunden warten, dann erneut."
                 )
 
             if last_result == "0":
-                if not stok:
-                    # Manche Firmwares setzen Cookie erst beim naechsten GET
+                if not picked:
                     self.session.get(
                         f"{self.base}index.html",
-                        headers={
-                            "Referer": self.base,
-                        },
+                        headers={"Referer": self.base},
                         timeout=self.timeout,
                         verify=False,
                     )
-                    stok = self.session.cookies.get("stok")
-                    if stok:
-                        stok = str(stok).strip().strip('"')
+                    jar = self.session.cookies.get_dict()
+                    for name in SESSION_COOKIE_NAMES:
+                        if name in jar and jar[name]:
+                            picked = (name, str(jar[name]).strip().strip('"'))
+                            break
 
-                if not stok:
-                    log.warning(
-                        "Login OK (result=0), aber kein stok-Cookie. "
-                        "Set-Cookie=%r session=%r",
-                        set_cookies,
-                        self.session.cookies.get_dict(),
-                    )
-                    # Trotzdem AD berechnen und ohne Cookie versuchen —
-                    # einige Aktionen brauchen nur AD; SEND_SMS meist stok.
-                    # synthetischen Marker setzen, Cookie-Header weglassen
-                    self.stok = ""
-                    rd = self._field("RD")
-                    self._ad = self._ad_token(rd)
+                if not picked:
                     raise RuntimeError(
-                        "Login result=0, aber Router sendet keinen stok-Cookie. "
-                        f"Set-Cookie-Header: {set_cookies!r}. "
-                        "Bitte diese Zeile melden. Tipp: anderen Browser-Login beenden, Router kurz trennen/an."
+                        "Login result=0, aber kein Session-Cookie (zsidn/stok). "
+                        f"Set-Cookie: {set_cookies!r}"
                     )
 
-                self.stok = stok
-                self.session.cookies.set("stok", stok, path="/")
+                name, value = picked
+                self._set_session(name, value)
                 rd = self._field("RD")
                 self._ad = self._ad_token(rd)
-                log.info("ZTE-Login OK")
-                return stok
+                log.info("ZTE-Login OK (%s)", name)
+                return value
 
             if last_result == "1":
                 break
@@ -270,15 +257,14 @@ class ZteRouter:
         if last_result == "1":
             hint = (
                 " result=1 = falsches Passwort. "
-                "Nimm das ADMIN-/Website-Passwort vom Router-Aufkleber "
-                "(nicht das WLAN-Passwort). In .env ohne Anfuehrungszeichen."
+                "Admin-/Website-Passwort vom Aufkleber (nicht WLAN)."
             )
         raise RuntimeError(
             f"ZTE-Login fehlgeschlagen (result={last_result or '?'}).{hint} Antwort: {last_body}"
         )
 
     def send_sms(self, number: str, message: str, cookie: str | None = None) -> dict[str, Any]:
-        if not self.stok or not self._ad:
+        if not self.cookie_value or not self._ad:
             self.login()
         assert self._ad is not None
 
@@ -290,7 +276,6 @@ class ZteRouter:
         )
         body = message.encode("utf-16-be").hex().upper()
 
-        # AD frisch holen (manche Firmwares wollen aktuelles RD)
         try:
             rd = self._field("RD")
             if rd:
@@ -344,9 +329,8 @@ class ZteRouter:
         return last
 
     def list_sms(self, cookie: str | None = None, mem_store: int = 1) -> list[dict[str, Any]]:
-        if not self.stok:
+        if not self.cookie_value:
             self.login()
-        # sms_data_total wie zte-to-telegram; fallback sms_data_info
         for cmd in ("sms_data_total", "sms_data_info"):
             try:
                 r = self.session.get(
