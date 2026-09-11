@@ -52,18 +52,38 @@ Nicht für Verträge ohne diese gratis Aanvullers — dort könnte Nachladen **G
 
 ### Schritt 1 — Python installieren (einmalig)
 
-1. Öffne im Browser: https://www.python.org/downloads/
-2. Klicke auf den großen gelben Button **Download Python**
-3. Starte die heruntergeladene Datei
-4. **Sehr wichtig:** Haken setzen bei  
-   **„Add python.exe to PATH“**
-5. Auf **Install Now** klicken und fertig warten
+Auf python.org kommt oft der neue **Python Install Manager** (manchmal „Download Manager“).  
+Dort gibt es **keinen** Haken „Add python.exe to PATH“ — das ist normal.
 
-Wenn Python schon installiert ist, kannst du diesen Schritt überspringen.
+So machst du es:
+
+1. Öffne https://www.python.org/downloads/
+2. Lade den Installer / Manager herunter und starte ihn
+3. Wenn er fragt, ob etwas zu **PATH** hinzugefügt werden soll → **Ja / Yes**
+4. Python installieren lassen (oft reicht „Install“ / neueste Version)
+5. Alle Fenster schließen
+
+Wenn danach etwas von „configure“ / Einstellungen kommt und nach PATH fragt: wieder **Ja**.
+
+#### Alternativ im Terminal (falls GUI unklar ist)
+
+Windows-Taste → `cmd` → Enter, dann eingeben:
+
+```text
+py install default
+```
+
+Wenn gefragt wird wegen PATH / konfigurieren:
+
+```text
+py install --configure
+```
+
+und dort **Ja** wählen, wenn PATH angeboten wird.
 
 #### Python ist da, aber `einrichten.bat` findet es nicht?
 
-Auf manchen PCs (z. B. Benutzerordner `jeffr`) steht Python schon unter  
+Auf manchen PCs steht Python schon unter  
 `C:\Users\...\AppData\Local\Python\bin` — aber **WindowsApps** steht darüber im PATH und blockiert es.
 
 Im Fenster **„Umgebungsvariable bearbeiten“** (Path):
@@ -74,7 +94,7 @@ Im Fenster **„Umgebungsvariable bearbeiten“** (Path):
 4. Alle CMD-/Einrichtungsfenster **schließen**  
 5. **`einrichten.bat` erneut** per Doppelklick starten  
 
-Die aktuelle `einrichten.bat` sucht Python auch direkt in diesem Ordner — oft reicht schon ein erneuter Start.
+Die aktuelle `einrichten.bat` (ab Release **v1.0.1**) sucht Python auch direkt in diesem Ordner — oft reicht schon ein erneuter Start mit der neuen Version.
 
 ---
 

@@ -52,7 +52,9 @@ if not defined PY (
   echo 6. einrichten.bat NOCHMAL starten (neues Fenster)
   echo.
   echo Oder neu installieren: https://www.python.org/downloads/
-  echo WICHTIG: Haken bei "Add python.exe to PATH"
+  echo (neuer Install Manager: KEIN PATH-Haken — das ist normal)
+  echo Falls gefragt "PATH hinzufuegen?" -^> Ja
+  echo Oder in cmd:   py install default
   echo.
   pause
   exit /b 1
