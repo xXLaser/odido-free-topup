@@ -7,6 +7,7 @@ import logging
 import re
 from datetime import datetime
 from typing import Any
+from urllib.parse import quote
 
 import requests
 import urllib3
@@ -15,7 +16,6 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 log = logging.getLogger("zte")
 
-# Neuere Firmwares (MC888 Pro ABPL): zsidn — aeltere: stok
 SESSION_COOKIE_NAMES = ("zsidn", "stok", "random")
 
 
@@ -23,9 +23,15 @@ def _sha256_upper(s: str) -> str:
     return hashlib.sha256(s.encode("utf-8")).hexdigest().upper()
 
 
-class ZteRouter:
-    """MC888 / MC888 Pro goform client."""
+def _md5_lower(s: str) -> str:
+    return hashlib.md5(s.encode("utf-8")).hexdigest().lower()
 
+
+def _md5_upper(s: str) -> str:
+    return hashlib.md5(s.encode("utf-8")).hexdigest().upper()
+
+
+class ZteRouter:
     def __init__(
         self,
         host: str,
@@ -44,7 +50,6 @@ class ZteRouter:
         self.cookie_name = "zsidn"
         self.cookie_value: str | None = None
         self._ad: str | None = None
-        # Rueckwaertskompatibel fuer aelteren Code
         self.stok: str | None = None
         self._probe()
 
@@ -59,14 +64,16 @@ class ZteRouter:
                 continue
 
     def _headers(self, with_cookie: bool = True) -> dict[str, str]:
+        # Wichtig: Cookie NUR hier setzen, nicht zusaetzlich im Cookie-Jar
+        # (sonst doppelte/kaputte Cookies bei manchen Firmwares).
         h = {
-            "Referer": self.base,
+            "Referer": f"{self.base}index.html",
             "Origin": self.base.rstrip("/"),
             "Accept": "application/json, text/javascript, */*; q=0.01",
             "X-Requested-With": "XMLHttpRequest",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         }
         if with_cookie and self.cookie_value:
-            # Wie vom Router gesetzt: Name="VALUE"
             h["Cookie"] = f'{self.cookie_name}="{self.cookie_value}"'
         return h
 
@@ -82,10 +89,12 @@ class ZteRouter:
         return r.json()
 
     def _post(self, data: dict[str, str]) -> requests.Response:
+        # requests soll KEINE Jar-Cookies mitschicken
         return self.session.post(
             f"{self.base}goform/goform_set_cmd_process",
             data=data,
             headers=self._headers(with_cookie=bool(self.cookie_value)),
+            cookies={},  # Jar unterdruecken
             timeout=self.timeout,
             verify=False,
         )
@@ -96,12 +105,28 @@ class ZteRouter:
         return "" if val is None else str(val)
 
     def _password_hash(self, ld: str) -> str:
-        prefix = _sha256_upper(self.password)
-        return _sha256_upper(prefix + ld.upper())
+        return _sha256_upper(_sha256_upper(self.password) + ld.upper())
 
-    def _ad_token(self, rd: str) -> str:
-        prefix = _sha256_upper(self.wa + self.cr)
-        return _sha256_upper(prefix + rd.upper())
+    def _ad_candidates(self, rd: str) -> list[tuple[str, str]]:
+        """Alle gaengigen AD-Varianten (SHA256 und MD5, Reihenfolge wa/cr)."""
+        rd_u = rd.upper()
+        rd_raw = rd
+        cands = [
+            ("sha256(wa+cr)+rdU", _sha256_upper(_sha256_upper(self.wa + self.cr) + rd_u)),
+            ("sha256(cr+wa)+rdU", _sha256_upper(_sha256_upper(self.cr + self.wa) + rd_u)),
+            ("sha256(wa+cr)+rd", _sha256_upper(_sha256_upper(self.wa + self.cr) + rd_raw)),
+            ("md5(cr+wa)+rdU", _md5_upper(_md5_lower(self.cr + self.wa) + rd_u)),
+            ("md5(wa+cr)+rdU", _md5_upper(_md5_lower(self.wa + self.cr) + rd_u)),
+            ("md5(cr+wa)+rd", _md5_upper(_md5_lower(self.cr + self.wa) + rd_raw)),
+            ("md5U(cr+wa)+rdU", _md5_upper(_md5_upper(self.cr + self.wa) + rd_u)),
+        ]
+        out: list[tuple[str, str]] = []
+        seen: set[str] = set()
+        for label, val in cands:
+            if val not in seen:
+                seen.add(val)
+                out.append((label, val))
+        return out
 
     def _iter_set_cookie_headers(self, response: requests.Response) -> list[str]:
         values: list[str] = []
@@ -113,7 +138,6 @@ class ZteRouter:
                 if callable(fn):
                     try:
                         values.extend(fn("Set-Cookie") or [])
-                        values.extend(fn("set-cookie") or [])
                     except Exception:
                         pass
         if not values:
@@ -123,7 +147,6 @@ class ZteRouter:
         return values
 
     def _pick_session_cookie(self, response: requests.Response) -> tuple[str, str] | None:
-        """Return (cookie_name, cookie_value) from Set-Cookie / jars."""
         for sc in self._iter_set_cookie_headers(response):
             for name in SESSION_COOKIE_NAMES:
                 m = re.search(
@@ -133,24 +156,14 @@ class ZteRouter:
                 )
                 if m:
                     return name.lower(), m.group(1).strip().strip('"')
-
-        self.session.cookies.update(response.cookies)
-        jar = {**response.cookies.get_dict(), **self.session.cookies.get_dict()}
-        for name in SESSION_COOKIE_NAMES:
-            if name in jar and jar[name]:
-                return name, str(jar[name]).strip().strip('"')
-            # case variants
-            for k, v in jar.items():
-                if k.lower() == name and v:
-                    return name, str(v).strip().strip('"')
         return None
 
     def _set_session(self, name: str, value: str) -> None:
         self.cookie_name = name
-        self.cookie_value = value
-        self.stok = value  # alias
-        # requests jar ohne ueberfluessige Anfuehrungszeichen
-        self.session.cookies.set(name, value, path="/")
+        self.cookie_value = value.strip().strip('"')
+        self.stok = self.cookie_value
+        # Jar leeren — wir setzen Cookie nur per Header
+        self.session.cookies.clear()
 
     def login(self) -> str:
         info = self._get(
@@ -166,176 +179,137 @@ class ZteRouter:
 
         ld = self._field("LD")
         if not ld:
-            raise RuntimeError("Konnte LD nicht lesen — Router erreichbar?")
+            raise RuntimeError("Konnte LD nicht lesen")
 
         hashed = self._password_hash(ld)
-        log.debug("LD=%s... hash_prefix=%s...", ld[:8], hashed[:8])
-
-        attempts: list[dict[str, str]] = [
-            {"isTest": "false", "goformId": "LOGIN", "password": hashed},
-        ]
-        if self.username:
-            attempts.append(
-                {
-                    "isTest": "false",
-                    "goformId": "LOGIN",
-                    "password": hashed,
-                    "user": self.username,
-                }
-            )
-
-        last_result = ""
-        last_body = ""
-        for payload in attempts:
-            self.cookie_value = None
-            self.stok = None
-            r = self.session.post(
-                f"{self.base}goform/goform_set_cmd_process",
-                data=payload,
-                headers={
-                    "Referer": self.base,
-                    "Origin": self.base.rstrip("/"),
-                    "Accept": "application/json, text/javascript, */*; q=0.01",
-                    "X-Requested-With": "XMLHttpRequest",
-                },
-                timeout=self.timeout,
-                verify=False,
-            )
-            last_body = (r.text or "")[:200]
-            try:
-                data = r.json()
-            except Exception:
-                data = {}
-            last_result = str(data.get("result", ""))
-            picked = self._pick_session_cookie(r)
-            set_cookies = self._iter_set_cookie_headers(r)
-            log.debug(
-                "Login goformId=%s result=%s cookie=%s set-cookie=%r",
-                payload.get("goformId"),
-                last_result,
-                f"{picked[0]}={picked[1][:12]}..." if picked else "no",
-                set_cookies,
-            )
-
-            if last_result == "3":
-                raise RuntimeError(
-                    "Router-Session belegt (result=3). "
-                    "Browser-Tab mit 192.168.0.1 SCHLIESSEN, 10 Sekunden warten, dann erneut."
-                )
-
-            if last_result == "0":
-                if not picked:
-                    self.session.get(
-                        f"{self.base}index.html",
-                        headers={"Referer": self.base},
-                        timeout=self.timeout,
-                        verify=False,
-                    )
-                    jar = self.session.cookies.get_dict()
-                    for name in SESSION_COOKIE_NAMES:
-                        if name in jar and jar[name]:
-                            picked = (name, str(jar[name]).strip().strip('"'))
-                            break
-
-                if not picked:
-                    raise RuntimeError(
-                        "Login result=0, aber kein Session-Cookie (zsidn/stok). "
-                        f"Set-Cookie: {set_cookies!r}"
-                    )
-
-                name, value = picked
-                self._set_session(name, value)
-                rd = self._field("RD")
-                self._ad = self._ad_token(rd)
-                log.info("ZTE-Login OK (%s)", name)
-                return value
-
-            if last_result == "1":
-                break
-
-        hint = ""
-        if last_result == "1":
-            hint = (
-                " result=1 = falsches Passwort. "
-                "Admin-/Website-Passwort vom Aufkleber (nicht WLAN)."
-            )
-        raise RuntimeError(
-            f"ZTE-Login fehlgeschlagen (result={last_result or '?'}).{hint} Antwort: {last_body}"
+        self.cookie_value = None
+        r = self.session.post(
+            f"{self.base}goform/goform_set_cmd_process",
+            data={"isTest": "false", "goformId": "LOGIN", "password": hashed},
+            headers={
+                "Referer": f"{self.base}index.html",
+                "Origin": self.base.rstrip("/"),
+                "X-Requested-With": "XMLHttpRequest",
+            },
+            cookies={},
+            timeout=self.timeout,
+            verify=False,
+        )
+        try:
+            data = r.json()
+        except Exception:
+            data = {}
+        result = str(data.get("result", ""))
+        picked = self._pick_session_cookie(r)
+        log.debug(
+            "Login result=%s cookie=%s set-cookie=%r",
+            result,
+            f"{picked[0]}={picked[1][:12]}..." if picked else "no",
+            self._iter_set_cookie_headers(r),
         )
 
+        if result == "3":
+            raise RuntimeError(
+                "Session belegt (result=3). Browser-Tab 192.168.0.1 schliessen, warten, erneut."
+            )
+        if result == "1":
+            raise RuntimeError(
+                "Falsches Passwort (result=1). Website-Passwort vom Aufkleber, nicht WLAN."
+            )
+        if result != "0" or not picked:
+            raise RuntimeError(f"Login fehlgeschlagen result={result} cookie={picked} body={r.text[:200]}")
+
+        self._set_session(*picked)
+        rd = self._field("RD")
+        ads = self._ad_candidates(rd)
+        self._ad = ads[0][1]
+        self._ads = ads
+        log.info("ZTE-Login OK (%s)", picked[0])
+        return self.cookie_value or ""
+
+    def sms_capacity(self) -> dict[str, Any]:
+        try:
+            return self._get({"isTest": "false", "cmd": "sms_capacity_info"})
+        except Exception as e:
+            return {"error": str(e)}
+
     def send_sms(self, number: str, message: str, cookie: str | None = None) -> dict[str, Any]:
-        if not self.cookie_value or not self._ad:
+        if not self.cookie_value:
             self.login()
-        assert self._ad is not None
+
+        # Kapazitaet loggen (voller Speicher = oft failure)
+        cap = self.sms_capacity()
+        log.info("SMS-Speicher: %s", cap)
 
         now = datetime.now().astimezone()
-        offset_h = int(now.utcoffset().total_seconds() // 3600) if now.utcoffset() else 1
+        offset_h = int(now.utcoffset().total_seconds() // 3600) if now.utcoffset() else 2
         sms_time = (
             f"{now.year % 100:02d};{now.month:02d};{now.day:02d};"
             f"{now.hour:02d};{now.minute:02d};{now.second:02d};+{abs(offset_h)}"
         )
-        body = message.encode("utf-16-be").hex().upper()
+        body_unicode = message.encode("utf-16-be").hex().upper()
+        # GSM7: Zeichen-Index als Hex (einfache Variante)
+        gsm = (
+            "@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>?"
+            "¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ¿abcdefghijklmnopqrstuvwxyzäöñüà"
+        )
+        body_gsm = "".join(f"{gsm.find(c):02X}" if c in gsm else "3F" for c in message)
 
-        try:
-            rd = self._field("RD")
-            if rd:
-                self._ad = self._ad_token(rd)
-        except Exception:
-            pass
-
-        variants = [
-            {
-                "isTest": "false",
-                "goformId": "SEND_SMS",
-                "Number": number,
-                "sms_time": sms_time,
-                "MessageBody": body,
-                "encode_type": "UNICODE",
-                "AD": self._ad,
-            },
-            {
-                "isTest": "false",
-                "goformId": "SEND_SMS",
-                "notCallback": "true",
-                "Number": number,
-                "sms_time": sms_time,
-                "MessageBody": body,
-                "ID": "-1",
-                "encode_type": "UNICODE",
-                "AD": self._ad,
-            },
-            {
-                "isTest": "false",
-                "goformId": "SEND_SMS",
-                "Number": number,
-                "sms_time": sms_time.rsplit(";", 1)[0] + ";+0",
-                "MessageBody": body,
-                "encode_type": "UNICODE",
-                "AD": self._ad,
-            },
-        ]
+        rd = self._field("RD")
+        ads = self._ad_candidates(rd)
+        numbers = [number, quote(number)]
+        times = [sms_time, sms_time.rsplit(";", 1)[0] + ";+0", sms_time.rsplit(";", 1)[0] + ";+1"]
 
         last: dict[str, Any] = {}
-        for data in variants:
-            r = self._post(data)
-            try:
-                last = r.json()
-            except Exception:
-                last = {"raw": r.text, "status_code": r.status_code}
-            log.debug("SEND_SMS -> %s", last)
-            result = str(last.get("result", "")).lower()
-            if result in ("success", "0", "ok"):
-                return last
-        return last
+        for ad_label, ad in ads:
+            for num in numbers:
+                for t in times:
+                    for encode_type, body in (
+                        ("UNICODE", body_unicode),
+                        ("GSM7_default", body_gsm),
+                        ("GSM7_default", body_unicode),  # manche wollen trotzdem UCS2-Hex
+                    ):
+                        for extra in (
+                            {},
+                            {"notCallback": "true", "ID": "-1"},
+                        ):
+                            data = {
+                                "isTest": "false",
+                                "goformId": "SEND_SMS",
+                                "Number": num,
+                                "sms_time": t,
+                                "MessageBody": body,
+                                "encode_type": encode_type,
+                                "AD": ad,
+                                **extra,
+                            }
+                            r = self._post(data)
+                            try:
+                                last = r.json()
+                            except Exception:
+                                last = {"raw": r.text, "status_code": r.status_code}
+                            result = str(last.get("result", "")).lower()
+                            log.debug(
+                                "SEND_SMS ad=%s enc=%s num=%s -> %s",
+                                ad_label,
+                                encode_type,
+                                num,
+                                last,
+                            )
+                            if result in ("success", "0", "ok", "sucess"):
+                                log.info("SMS OK (ad=%s enc=%s)", ad_label, encode_type)
+                                self._ad = ad
+                                return last
+
+        return last or {"result": "failure"}
 
     def list_sms(self, cookie: str | None = None, mem_store: int = 1) -> list[dict[str, Any]]:
         if not self.cookie_value:
             self.login()
         for cmd in ("sms_data_total", "sms_data_info"):
             try:
-                r = self.session.get(
-                    f"{self.base}goform/goform_get_cmd_process",
-                    params={
+                data = self._get(
+                    {
                         "isTest": "false",
                         "cmd": cmd,
                         "page": "0",
@@ -343,13 +317,8 @@ class ZteRouter:
                         "mem_store": str(mem_store),
                         "tags": "10",
                         "order_by": "order by id desc",
-                    },
-                    headers=self._headers(),
-                    timeout=self.timeout,
-                    verify=False,
+                    }
                 )
-                r.raise_for_status()
-                data = r.json()
                 messages = data.get("messages") or data.get("Messages") or []
                 if isinstance(messages, dict):
                     messages = list(messages.values())
