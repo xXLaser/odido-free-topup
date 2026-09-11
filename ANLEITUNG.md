@@ -126,23 +126,32 @@ Speichern und Notepad schließen.
 Das Programm braucht einen **Zugangscode**, damit Odido weiß: „Das bist du.“  
 Das ist **kein Passwort zum Weitergeben**. Behandle es wie ein Passwort.
 
-1. Öffne: https://github.com/GuusBackup/Odido.Authenticator/releases/latest  
-2. Unter **Assets** die Datei **`Odido-Authenticator.zip`** herunterladen  
-3. ZIP entpacken (Rechtsklick → „Alle extrahieren“)  
-4. **`Odido.Authenticator.exe`** starten  
-5. Das Programm zeigt eine **Internetadresse (URL)**  
-6. Diese Adresse im Browser öffnen und bei Odido **einloggen**  
-7. Nach dem Login landest du auf einer Seite, deren Adresse ungefähr so beginnt:  
-   `https://www.odido.nl/loginappresult?token=...`  
-8. **Die gesamte Adresse aus der Browser-Zeile kopieren**  
-9. Zurück ins Authenticator-Fenster: Adresse **einfügen** und Enter  
-10. Den angezeigten **Authentication Token** kopieren  
-11. In der Datei `.env` hinter `ODIDO_TOKEN=` einfügen (alles in einer Zeile, ohne Anführungszeichen)  
-12. Speichern
+**Problem:** Wenn man den Authenticator per Doppelklick startet, schließt sich das Fenster oft  
+sofort nach dem Token — dann kannst du ihn nicht mehr ablesen.  
+Deshalb: **`token-holen.bat`** nutzen (Fenster bleibt offen).
 
-**Tipp:** Wenn Windows warnt „Unbekannter Herausgeber“, kannst du bei Vertrauen in die Quelle trotzdem fortfahren — das Tool kommt von der Community, nicht von Odido.
+1. Lade herunter: https://github.com/GuusBackup/Odido.Authenticator/releases/latest  
+   → unter **Assets** die Datei **`Odido-Authenticator.zip`**
+2. ZIP entpacken
+3. Die Datei **`Odido.Authenticator.exe`** in den Ordner `odido-free-topup` **kopieren**  
+   (derselbe Ordner wie `einrichten.bat`)
+4. Doppelklick auf **`token-holen.bat`**
+5. Im Authenticator erscheint eine **Internetadresse** → im Browser öffnen
+6. Bei Odido **einloggen**
+7. Nach dem Login: die **komplette Adresse** aus der Browser-Zeile kopieren  
+   (beginnt mit `https://www.odido.nl/loginappresult?token=...`)
+8. Zurück ins schwarze Fenster: Adresse **einfügen** → **Enter**
+9. Wenn nach **Y** gefragt wird: **`Y`** tippen → **Enter**
+10. Es erscheint ein **langer Token** (viele Zeichen)  
+    → **sofort markieren und kopieren** (Strg+C)  
+    → das Fenster bleibt durch `token-holen.bat` offen
+11. Datei **`.env`** mit Notepad öffnen
+12. Hinter `ODIDO_TOKEN=` den Token einfügen (eine Zeile, ohne Leerzeichen/Anführungszeichen)
+13. Speichern
 
-Wenn das Programm später meldet, der Token sei ungültig (401/403), wiederhole Schritt 3.
+**Tipp:** Nicht nur „Y“ drücken und wegschauen — erst Token kopieren, dann Fenster schließen.
+
+Wenn das Programm später meldet, der Token sei ungültig (401/403), Schritt 3 wiederholen.
 
 ---
 
@@ -212,6 +221,7 @@ Odido selbst sagt, du darfst die gratis Aanvullers so oft aktivieren wie du will
 | Datei | Wofür |
 | --- | --- |
 | `einrichten.bat` | Einmalig vorbereiten |
+| `token-holen.bat` | Zugangscode holen (Fenster bleibt offen) |
 | `testen.bat` | Sicher prüfen, ohne nachzuladen |
 | `starten.bat` | Automatik starten |
 | `.env` | Deine persönlichen Einstellungen (Token, Nummer) — **geheim halten** |
