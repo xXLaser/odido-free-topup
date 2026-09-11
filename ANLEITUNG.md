@@ -137,11 +137,14 @@ Das ist der Weg, wenn Schritt 3 (Token) nicht klappt.
 
 ```text
 ZTE_HOST=192.168.0.1
-ZTE_USER=admin
+ZTE_USER=
 ZTE_PASSWORD=dein_router_passwort
 ZTE_INTERVAL=120
 ZTE_PERIODIC_EXTRA_MINUTES=0
 ```
+
+**Wichtig:** Viele ZTE-Router fragen **keinen Benutzer** — `ZTE_USER=` einfach **leer** lassen.  
+Nur das Passwort eintragen (dasselbe wie auf der Router-Webseite).
 
 3. Doppelklick **`testen-sms.bat`** (nur Login-Test, sendet noch keine SMS)
 4. Wenn das OK aussieht: **`sms-extra-jetzt.bat`** — sendet **einmal** `EXTRA` an **1280** (gratis Aanvuller)

@@ -125,7 +125,7 @@ def parse_args() -> argparse.Namespace:
         description="Odido gratis 2GB per SMS (EXTRA an 1280) uber ZTE-Router."
     )
     p.add_argument("--host", default=os.environ.get("ZTE_HOST", "192.168.0.1"))
-    p.add_argument("--user", default=os.environ.get("ZTE_USER", "admin"))
+    p.add_argument("--user", default=os.environ.get("ZTE_USER", ""))
     p.add_argument("--password", default=os.environ.get("ZTE_PASSWORD", ""))
     p.add_argument(
         "--interval",
