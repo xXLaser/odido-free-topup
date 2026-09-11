@@ -1,16 +1,15 @@
 @echo off
-chcp 65001 >nul
+setlocal
 cd /d "%~dp0"
-setlocal EnableExtensions
 
 echo ========================================
-echo  Odido Free Top-up — Ersteinrichtung
+echo  Odido Free Top-up - Ersteinrichtung
 echo ========================================
 echo.
 
 set "PY="
 
-REM 1) py-Launcher (oft nach python.org-Installation vorhanden)
+REM 1) py launcher
 where py >nul 2>&1
 if not errorlevel 1 (
   for /f "delims=" %%I in ('where py 2^>nul') do (
@@ -18,7 +17,7 @@ if not errorlevel 1 (
   )
 )
 
-REM 2) python im PATH — aber Microsoft-Store-Attrappe ueberspringen
+REM 2) python on PATH, skip WindowsApps store stub
 if not defined PY (
   for /f "delims=" %%I in ('where python 2^>nul') do (
     echo %%I | find /i "\WindowsApps\" >nul
@@ -28,33 +27,42 @@ if not defined PY (
   )
 )
 
-REM 3) Typische Installationsorte (auch ohne PATH)
+REM 3) common install locations
 if not defined PY if exist "%LocalAppData%\Python\bin\python.exe" set "PY=%LocalAppData%\Python\bin\python.exe"
+if not defined PY if exist "%LocalAppData%\Programs\Python\Python314\python.exe" set "PY=%LocalAppData%\Programs\Python\Python314\python.exe"
 if not defined PY if exist "%LocalAppData%\Programs\Python\Python313\python.exe" set "PY=%LocalAppData%\Programs\Python\Python313\python.exe"
 if not defined PY if exist "%LocalAppData%\Programs\Python\Python312\python.exe" set "PY=%LocalAppData%\Programs\Python\Python312\python.exe"
 if not defined PY if exist "%LocalAppData%\Programs\Python\Python311\python.exe" set "PY=%LocalAppData%\Programs\Python\Python311\python.exe"
+if not defined PY if exist "%ProgramFiles%\Python314\python.exe" set "PY=%ProgramFiles%\Python314\python.exe"
 if not defined PY if exist "%ProgramFiles%\Python313\python.exe" set "PY=%ProgramFiles%\Python313\python.exe"
 if not defined PY if exist "%ProgramFiles%\Python312\python.exe" set "PY=%ProgramFiles%\Python312\python.exe"
+
+REM 4) Python Install Manager runtimes (pythoncore-*-64)
+if not defined PY (
+  for /d %%D in ("%LocalAppData%\Python\pythoncore-*-64") do (
+    if exist "%%~D\python.exe" if not defined PY set "PY=%%~D\python.exe"
+  )
+)
+if not defined PY (
+  for /d %%D in ("%LocalAppData%\Python\pythoncore-*") do (
+    if exist "%%~D\python.exe" if not defined PY set "PY=%%~D\python.exe"
+  )
+)
 
 if not defined PY (
   echo FEHLER: Python wurde nicht gefunden.
   echo.
-  echo Auf diesem PC oft schon vorhanden unter:
+  echo Auf diesem PC oft vorhanden unter:
   echo   %LocalAppData%\Python\bin
+  echo   %LocalAppData%\Python\pythoncore-3.14-64
   echo.
-  echo Schnellhilfe PATH (Freund-PC):
-  echo 1. Windows-Suche: "Umgebungsvariablen"
-  echo 2. "Umgebungsvariablen bearbeiten" oeffnen
-  echo 3. Bei Benutzervariablen "Path" markieren -^> Bearbeiten
-  echo 4. Eintrag "...\AppData\Local\Python\bin" ganz NACH OBEN schieben
-  echo    (ueber WindowsApps!)
-  echo 5. OK - OK - ALLE Fenster schliessen
-  echo 6. einrichten.bat NOCHMAL starten (neues Fenster)
+  echo Schnellhilfe:
+  echo 1. Windows-Suche: Umgebungsvariablen
+  echo 2. Path bearbeiten
+  echo 3. Eintrag ...\AppData\Local\Python\bin ganz NACH OBEN
+  echo 4. OK, alle Fenster schliessen, einrichten.bat neu starten
   echo.
-  echo Oder neu installieren: https://www.python.org/downloads/
-  echo (neuer Install Manager: KEIN PATH-Haken — das ist normal)
-  echo Falls gefragt "PATH hinzufuegen?" -^> Ja
-  echo Oder in cmd:   py install default
+  echo Oder in cmd:  py install default
   echo.
   pause
   exit /b 1
@@ -63,7 +71,7 @@ if not defined PY (
 echo Python gefunden: %PY%
 "%PY%" --version
 if errorlevel 1 (
-  echo FEHLER: Python startet nicht. Bitte neu installieren von python.org
+  echo FEHLER: Python startet nicht.
   pause
   exit /b 1
 )
@@ -74,8 +82,7 @@ if not exist ".venv\Scripts\python.exe" (
   "%PY%" -m venv .venv
   if errorlevel 1 (
     echo FEHLER beim Anlegen der Umgebung.
-    echo Tipp: Bei manchen Python-Installationen fehlt "venv".
-    echo Dann python.org-Installer nutzen und "Install Now" waehlen.
+    echo Tipp: In cmd ausfuehren:  py -m venv .venv
     pause
     exit /b 1
   )
@@ -94,13 +101,14 @@ if not exist ".env" (
   copy ".env.example" ".env" >nul
   echo.
   echo Die Datei .env wurde angelegt.
-  echo Bitte oeffne sie mit Notepad und trage ein:
-  echo   - ODIDO_TOKEN=...   (siehe ANLEITUNG.md)
-  echo   - ODIDO_MSISDN=...  (Handynummer der SIM, z.B. +31612345678)
+  echo Bitte in Notepad eintragen:
+  echo   ODIDO_TOKEN=...
+  echo   ODIDO_MSISDN=+316...
+  echo Siehe ANLEITUNG.md
   echo.
   notepad ".env"
 ) else (
-  echo .env existiert bereits — wird nicht ueberschrieben.
+  echo .env existiert bereits - wird nicht ueberschrieben.
 )
 
 echo.

@@ -1,5 +1,5 @@
 @echo off
-chcp 65001 >nul
+setlocal
 cd /d "%~dp0"
 
 if not exist ".venv\Scripts\python.exe" (
@@ -19,3 +19,4 @@ echo.
 ".venv\Scripts\python.exe" odido_free_topup.py --once --dry-run -v
 echo.
 pause
+endlocal
